@@ -20,7 +20,7 @@ public class RequesterImmutabilityTest {
 
     @Test
     public void shouldNotReturnSameInstanceAfterMutation() {
-        Requester original = unit.get();
+        final Requester original = unit.get();
         Assert.assertNotSame(original, original.accept(MediaType.ALL));
         Assert.assertNotSame(original, original.contentType(MediaType.APPLICATION_JSON));
         Assert.assertNotSame(original, original.header("header","value"));
@@ -32,4 +32,5 @@ public class RequesterImmutabilityTest {
         Assert.assertNotSame(original, original.ifNoneMatch(""));
         Assert.assertNotSame(original, original.ifUnmodifiedSince(OffsetDateTime.now()));
     }
+
 }

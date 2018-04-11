@@ -13,6 +13,7 @@ import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.concurrent.ListenableFuture;
 import org.zalando.fauxpas.ThrowingUnaryOperator;
 
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -21,6 +22,7 @@ import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import static org.zalando.riptide.CancelableCompletableFuture.preserveCancelability;
 
@@ -35,7 +37,7 @@ public final class Requester extends Dispatcher {
     private final HttpHeaders headers;
 
     Requester(final AsyncClientHttpRequestFactory requestFactory, final MessageWorker worker,
-            final RequestArguments arguments, Plugin plugin, ImmutableMultimap<String,String> query, HttpHeaders headers) {
+            final RequestArguments arguments, final Plugin plugin, final ImmutableMultimap<String,String> query, final HttpHeaders headers) {
         this.requestFactory = requestFactory;
         this.worker = worker;
         this.arguments = arguments;
@@ -44,81 +46,80 @@ public final class Requester extends Dispatcher {
         this.headers = headers;
     }
 
-    private Requester(Requester requester, ImmutableMultimap<String,String> query, HttpHeaders headers) {
-        this(requester.requestFactory, requester.worker, requester.arguments, requester.plugin, query, headers);
-    }
-
+    @CheckReturnValue
     public Requester queryParam(final String name, final String value) {
-       return new Requester(this, ImmutableMultimap.<String, String>builder().putAll(this.query).put(name, value).build(), this.headers);
+        return withQuery(ImmutableMultimap.<String, String>builder().putAll(query).put(name, value).build());
     }
 
+    @CheckReturnValue
     public Requester queryParams(final Multimap<String, String> params) {
-        return new Requester(this, ImmutableMultimap.<String, String>builder().putAll(this.query).putAll(params).build(), this.headers);
+        return withQuery(ImmutableMultimap.<String, String>builder().putAll(query).putAll(params).build());
     }
 
+    @CheckReturnValue
+    private Requester withQuery(final ImmutableMultimap<String, String> query) {
+        return new Requester(requestFactory, worker, arguments, plugin, query, headers);
+    }
+
+    @CheckReturnValue
     public Requester accept(final MediaType acceptableMediaType, final MediaType... acceptableMediaTypes) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setAccept(Lists.asList(acceptableMediaType, acceptableMediaTypes));
-        return new Requester(this, this.query, headers);
+        return withHeaders(headers -> headers.setAccept(Lists.asList(acceptableMediaType, acceptableMediaTypes)));
     }
 
+    @CheckReturnValue
     public Requester contentType(final MediaType contentType) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setContentType(contentType);
-        Requester cloned = new Requester(this, this.query, headers);
-        return cloned;
+        return withHeaders(headers -> headers.setContentType(contentType));
     }
 
+    @CheckReturnValue
     public Requester ifModifiedSince(final OffsetDateTime since) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setIfModifiedSince(since.toInstant().toEpochMilli());
-        return new Requester(this, this.query, headers);
+        return withHeaders(headers -> headers.setIfModifiedSince(since.toInstant().toEpochMilli()));
     }
 
+    @CheckReturnValue
     public Requester ifUnmodifiedSince(final OffsetDateTime since) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setIfUnmodifiedSince(since.toInstant().toEpochMilli());
-        return new Requester(this, this.query, headers);
+        return withHeaders(headers -> headers.setIfUnmodifiedSince(since.toInstant().toEpochMilli()));
     }
 
+    @CheckReturnValue
     public Requester ifNoneMatch(final String... entityTags) {
         return ifNoneMatch(Arrays.asList(entityTags));
     }
 
+    @CheckReturnValue
     public Requester ifMatch(final String... entityTags) {
         return ifMatch(Arrays.asList(entityTags));
     }
 
-    private Requester ifMatch(final List<String> entityTags) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setIfMatch(entityTags);
-        return new Requester(this, this.query, headers);
+    @CheckReturnValue
+    public Requester ifMatch(final List<String> entityTags) {
+        return withHeaders(headers -> headers.setIfMatch(entityTags));
     }
 
-    private Requester ifNoneMatch(final List<String> entityTags) {
-        HttpHeaders headers = cloneHeaders();
-        headers.setIfNoneMatch(entityTags);
-        return new Requester(this, this.query, headers);
+    @CheckReturnValue
+    public Requester ifNoneMatch(final List<String> entityTags) {
+        return withHeaders(headers -> headers.setIfNoneMatch(entityTags));
     }
 
+    @CheckReturnValue
     public Requester header(final String name, final String value) {
-        HttpHeaders headers = cloneHeaders();
-        headers.add(name, value);
-        return new Requester(this, this.query, headers);
+        return withHeaders(headers -> headers.add(name, value));
     }
 
-    public Requester headers(final HttpHeaders headers) {
-        HttpHeaders headersCloned = cloneHeaders();
-        headersCloned.putAll(headers);
-        return new Requester(this, this.query, headersCloned);
+    @CheckReturnValue
+    public Requester headers(final HttpHeaders additionalHeaders) {
+        return withHeaders(headers -> headers.putAll(additionalHeaders));
     }
 
-    private HttpHeaders cloneHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.putAll(this.headers);
-        return headers;
+    @CheckReturnValue
+    private Requester withHeaders(final Consumer<HttpHeaders> applier) {
+        final HttpHeaders copy = new HttpHeaders();
+        copy.putAll(headers);
+        applier.accept(copy);
+        return new Requester(requestFactory, worker, arguments, plugin, query, copy);
     }
 
+    @CheckReturnValue
     public <T> Dispatcher body(@Nullable final T body) {
         return execute(body);
     }
